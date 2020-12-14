@@ -17,12 +17,19 @@ class GetFATNUrl(HTMLParser):
 
 import os
 import requests 
-
-def Download_FATN(url: str, folder_name:str):
+'''
+ 2001  curl -L -I http://files.fatntalkingnews.org.uk/audio/magazine.mp3
+ 2002  curl -L -I https://files.fatntalkingnews.org.uk/audio/magazine.mp3
+ 2003  curl -L -I https://files.fatntalkingnews.org.uk/audio/Arena.mp3
+ 2004  curl -L -I https://files.fatntalkingnews.org.uk/audio/Haslemere.mp3
+ 2005  curl -L -I https://files.fatntalkingnews.org.uk/audio/Alton.mp3
+'''
+def Download_FATN(url: str, 
+                  folder_name:str, 
+                  localFile=str('FATN News Weeekly File.zip')):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name) # create folder if it does not exist
         
-    local_filename = 'FATN News Weeekly File.zip'
     path=os.path.join(folder_name, local_filename)
     r = requests.get(url, stream=True)
     if r.ok:
