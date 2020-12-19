@@ -1,3 +1,6 @@
+import os
+import logging
+
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
@@ -5,7 +8,19 @@ import time
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
-try:
+require_version('ST7789','1.0')
+
+
+def check_call(exc_type, func, *args):
+    try:
+        func(*args)
+        return True
+    except exc_type:
+        return False
+
+def check_version(package, version):
+    return check_call(ValueError, require_version, package, version)
+
   import ST7789 as ST7789
   disp = ST7789.ST7789(
     port=0,
