@@ -1,16 +1,24 @@
+#!/usr/bin/env python3
 # /* FATN_Parser.pl */
 
 from html.parser import HTMLParser
-import urllib
+from urllib.request import urlopen
 import os
 import requests
 
 
 class GetFATNUrl(HTMLParser):
-    ''' Extend HTMLParser template to handle FATN Website, looking for
+    """ Extend HTMLParser template to handle FATN Website, looking for
     dropbox tinyurl link.  Define handle_starttag to checkfor
     specific condition and extract link into self.FATNurl
-    '''
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.FATNurl = ''
+
+    def error(self, message):
+        pass
 
     def handle_starttag(self, tag, attrs):
         if tag == 'a':
@@ -96,7 +104,7 @@ OSError
 
 def Download_FATN(download_url: str,
                   folder_name: str,
-                  local_file=str('FATN News Weeekly File.zip')):
+                  local_file=str('FATN News Weekly File.zip')):
     """ Download the given url string into the location provided by
     folder_name and localFile.
     """
@@ -118,7 +126,6 @@ def Download_FATN(download_url: str,
     except BaseException as exception:
         print('Unexpected error:', repr(exception))
 
-
     if os.path.exists(folder_name):
         path = os.path.join(folder_name, local_file)
         r = requests.get(download_url, stream=True)
@@ -128,7 +135,7 @@ def Download_FATN(download_url: str,
                 for chunk in r.iter_content(chunk_size=1024 * 8):
                     if chunk:
                         f.write(chunk)
-                        f.flush
+                        f.flush()
                         os.fsync(f.fileno())
                         # print('.',end='')
         else:  # HTTP status code 4xx/5xx
@@ -140,11 +147,11 @@ def Download_FATN(download_url: str,
 url = 'https://www.fatntalkingnews.org.uk/about-fatn-talking-news/#coronavirus'
 FATN_parse = GetFATNUrl()
 
-FATN = urllib.request.urlopen(url)  # get the FATN wordpress webpage
+FATN = urlopen(url)  # get the FATN wordpress webpage
 FATN_parse.feed(str(FATN.read()))  # parse it for the dropbox link
 # print(FATN_parse.FATNurl)
 
-FATNdropboxurl = urllib.request.urlopen(FATNparse.FATNurl)  # Get dropbox url from link
+FATNdropboxurl = urlopen(FATN_parse.FATNurl)  # Get dropbox url from link
 print("FATN Dropbox URL:", FATNdropboxurl.geturl())
 
 FATNdownload = str(FATNdropboxurl.geturl()).replace('?dl=0', '?dl=1')  # set the download bit
