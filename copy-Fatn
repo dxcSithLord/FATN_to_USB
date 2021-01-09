@@ -1,8 +1,0 @@
-  sudo mount /dev/sda1 /media/usbstick
-  cd /media/usbstick
-  sudo rm *.mp3
-  sudo unzip  ~/FATN\ News\ Weekly\ File.zip 
-  cd
-  sync; sync
-   sudo umount /dev/sda1
-  echo "done"

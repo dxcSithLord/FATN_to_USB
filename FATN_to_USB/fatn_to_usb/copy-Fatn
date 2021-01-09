@@ -1,8 +1,31 @@
-  sudo mount /dev/sda1 /media/usbstick
-  cd /media/usbstick
-  sudo rm *.mp3
-  sudo unzip  ~/FATN\ News\ Weekly\ File.zip 
-  cd
-  sync; sync
-   sudo umount /dev/sda1
-  echo "done"
+#!/usr/bin/env python3
+# need to have udisks2 installed, with polkit settings defined for pi
+# if on raspberrypi, ignore mmcblk
+# look for usb devices
+import os
+
+
+def proc_cpuinfo_exists():
+    return os.path.exists('/proc/cpuinfo')
+
+
+def get_cpuinfo():
+    """ Read the processor information into a dictionary
+    find out if on raspberry pi
+    else determine root device and ignore that from udisksctl
+    """
+    if proc_cpuinfo_exists():
+        with open('/proc/cpuinfo', 'r', newline='\n') as reader:
+            cpudict = {k.strip(): v.strip() for line in reader if ':' in line for (k, v) in [line.split(':')]}
+    return cpudict
+
+
+# udisksctl status
+# udisksctl mounnt -b /dev/sda1
+#  cd /media/usbstick
+#  sudo rm *.mp3
+#  sudo unzip  ~/FATN\ News\ Weekly\ File.zip
+#  cd
+#  sync; sync
+#   sudo umount /dev/sda1
+#  echo "done"
