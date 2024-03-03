@@ -7,7 +7,7 @@ authors = ["Alistair Amabile <alistairanywhere@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 argparse = ""
-Pillow = "^10.0.1"
+Pillow = "^10.2.0"
 html = ""
 
 [tool.poetry.dev-dependencies]
