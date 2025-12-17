@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fatn_to_usb"
-version = "0.1.0"
+version = "0.3.0"
 description = "Download FATN zip file and load onto USB stick"
 authors = ["Alistair Amabile <alistairanywhere@gmail.com>"]
 

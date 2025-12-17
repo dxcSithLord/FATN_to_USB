@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "FATN_to_USB"
-version = "0.1.0"
-description = ""
+version = "0.3.0"
+description = "Automated USB loader for Farnham and Alton Talking News audio content"
 authors = ["Alistair Amabile <alistairanywhere@gmail.com>"]
 
 [tool.poetry.dependencies]
