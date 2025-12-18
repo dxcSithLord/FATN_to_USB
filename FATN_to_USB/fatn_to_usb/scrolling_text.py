@@ -8,6 +8,9 @@ import time
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
+# Initialize display variable
+disp = None
+
 # Try to import and initialize ST7789 display
 try:
     import ST7789 as ST7789
@@ -18,22 +21,29 @@ try:
         backlight=19,               # 18 for back BG slot, 19 for front BG slot.
         spi_speed_hz=80 * 1000 * 1000
     )
-except BaseException as exception:
-    print('ST7789 not available %s' % repr(exception))
+    print('ST7789 display initialized successfully')
+except (ImportError, OSError, RuntimeError) as exception:
+    print('ST7789 not available: %s' % repr(exception))
 
-# Try to import and initialize ST7735 display as fallback
-try:
-    import ST7735 as ST7735
-    disp = ST7735.ST7735(
-        port=0,
-        cs=1,
-        dc=9,
-        backlight=12,
-        rotation=270,
-        spi_speed_hz=10000000
-    )
-except BaseException as exception:
-    print('ST7735 not available %s' % repr(exception))
+    # Try to import and initialize ST7735 display as fallback
+    try:
+        import ST7735 as ST7735
+        disp = ST7735.ST7735(
+            port=0,
+            cs=1,
+            dc=9,
+            backlight=12,
+            rotation=270,
+            spi_speed_hz=10000000
+        )
+        print('ST7735 display initialized successfully')
+    except (ImportError, OSError, RuntimeError) as exception:
+        print('ST7735 not available: %s' % repr(exception))
+        print('Warning: No display hardware available')
+
+# Ensure disp is defined even if both displays fail
+if disp is None:
+    print('No display initialized - display functions will not work')
 
 def do_mes(display, MESSAGE='', colour=(0,255,0)):
     ''' procedure to put message with background colour onto display '''

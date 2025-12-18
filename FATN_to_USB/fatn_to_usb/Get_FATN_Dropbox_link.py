@@ -128,7 +128,8 @@ def Download_FATN(download_url: str,
 
     if os.path.exists(folder_name):
         path = os.path.join(folder_name, local_file)
-        r = requests.get(download_url, stream=True)
+        # Add timeout to prevent indefinite hangs (60s connection, 300s read)
+        r = requests.get(download_url, stream=True, timeout=(60, 300))
         if r.ok:
             print("Saving to", os.path.abspath(path))
             with open(path, 'wb') as f:

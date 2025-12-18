@@ -69,7 +69,8 @@ def get_usb_devices():
             ['udisksctl', 'status'],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=10
         )
 
         # Parse output to find USB devices
@@ -110,7 +111,8 @@ def mount_usb_device(device_path):
             ['udisksctl', 'mount', '-b', device_path],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=30
         )
 
         # Extract mount point from output
@@ -141,16 +143,17 @@ def unmount_usb_device(device_path):
     """
     try:
         # Sync to ensure all data is written
-        subprocess.run(['sync'], check=True)
+        subprocess.run(['sync'], check=True, timeout=30)
         time.sleep(1)
-        subprocess.run(['sync'], check=True)
+        subprocess.run(['sync'], check=True, timeout=30)
 
         # Unmount the device
         result = subprocess.run(
             ['udisksctl', 'unmount', '-b', device_path],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=30
         )
 
         print(f'Successfully unmounted {device_path}')
@@ -193,9 +196,36 @@ def remove_old_mp3_files(mount_point):
         return 0
 
 
+def is_safe_path(base_path, file_path):
+    """
+    Validate that a file path is safe and doesn't escape the base directory.
+
+    Prevents Zip Slip vulnerability by checking for:
+    - Absolute paths
+    - Parent directory references (..)
+    - Paths that would write outside base_path
+
+    Args:
+        base_path (str): The base directory (e.g., USB mount point)
+        file_path (str): The file path to validate (from ZIP archive)
+
+    Returns:
+        bool: True if path is safe, False otherwise
+    """
+    # Normalize paths to resolve any '..' or '.' components
+    base = os.path.abspath(base_path)
+    target = os.path.abspath(os.path.join(base_path, file_path))
+
+    # Check if the target path starts with the base path
+    # This ensures the file will be extracted within the intended directory
+    return target.startswith(base + os.sep) or target == base
+
+
 def extract_zip_to_usb(zip_path, mount_point):
     """
-    Extract ZIP file contents to USB mount point.
+    Extract ZIP file contents to USB mount point with security validation.
+
+    Implements Zip Slip prevention by validating all file paths before extraction.
 
     Args:
         zip_path (str): Path to ZIP file
@@ -214,7 +244,14 @@ def extract_zip_to_usb(zip_path, mount_point):
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            # Extract all files
+            # Validate all file paths before extraction (Zip Slip prevention)
+            for member in zip_ref.namelist():
+                if not is_safe_path(mount_point, member):
+                    print(f'❌ Security: Rejected unsafe path in ZIP: {member}')
+                    print(f'   This path attempts to write outside {mount_point}')
+                    return False
+
+            # All paths validated - safe to extract
             zip_ref.extractall(mount_point)
             extracted_files = zip_ref.namelist()
             print(f'Extracted {len(extracted_files)} files to {mount_point}')
@@ -234,6 +271,8 @@ def process_usb_update(device_path, zip_file_path):
     """
     Complete workflow to update USB with FATN content.
 
+    Ensures USB is properly unmounted even if errors occur during the update process.
+
     Args:
         device_path (str): USB device path (e.g., '/dev/sda1')
         zip_file_path (str): Path to FATN ZIP file
@@ -252,6 +291,9 @@ def process_usb_update(device_path, zip_file_path):
         print('❌ Failed to mount USB device')
         return False
 
+    # Track success state
+    success = False
+
     try:
         # Step 2: Remove old MP3 files
         print('\n[2/5] Removing old MP3 files...')
@@ -262,32 +304,39 @@ def process_usb_update(device_path, zip_file_path):
         print('\n[3/5] Extracting new FATN content...')
         if not extract_zip_to_usb(zip_file_path, mount_point):
             print('❌ Failed to extract ZIP file')
+            # Will still unmount in finally block
             return False
         print('✓ Content extracted successfully')
 
         # Step 4: Sync filesystem
         print('\n[4/5] Synchronizing filesystem...')
-        subprocess.run(['sync'], check=True)
+        subprocess.run(['sync'], check=True, timeout=30)
         time.sleep(1)
         print('✓ Sync complete')
 
-        # Step 5: Unmount USB
-        print('\n[5/5] Unmounting USB device...')
-        if not unmount_usb_device(device_path):
-            print('❌ Failed to unmount USB device')
-            return False
-        print('✓ USB unmounted successfully')
+        # Mark as successful before unmounting
+        success = True
 
-        print('\n=== USB update complete! ===')
-        print('USB drive can now be safely removed.')
-        return True
-
+    except subprocess.TimeoutExpired:
+        print('❌ Sync operation timed out')
+        return False
     except Exception as e:
         print(f'\n❌ Error during USB update: {e}')
-        # Attempt to unmount even on error
-        print('Attempting to unmount USB device...')
-        unmount_usb_device(device_path)
         return False
+    finally:
+        # Step 5: Always unmount USB (even on failure)
+        print('\n[5/5] Unmounting USB device...')
+        if unmount_usb_device(device_path):
+            print('✓ USB unmounted successfully')
+            if success:
+                print('\n=== USB update complete! ===')
+                print('USB drive can now be safely removed.')
+        else:
+            print('❌ Failed to unmount USB device')
+            print('⚠️  WARNING: USB may not be safe to remove')
+            success = False
+
+    return success
 
 
 if __name__ == '__main__':

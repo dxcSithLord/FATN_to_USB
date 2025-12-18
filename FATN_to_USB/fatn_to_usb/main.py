@@ -82,9 +82,31 @@ def display_message(disp, do_mes, message, color=(0, 255, 0)):
         print(f'[DISPLAY] {message}')
 
 
+def is_safe_url(url):
+    """
+    Validate that a URL uses a safe scheme (http or https only).
+
+    Prevents SSRF attacks by rejecting file://, ftp://, and other unsafe schemes.
+
+    Args:
+        url (str): URL to validate
+
+    Returns:
+        bool: True if URL scheme is safe, False otherwise
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        # Only allow http and https schemes
+        return parsed.scheme in ('http', 'https')
+    except Exception:
+        return False
+
+
 def download_fatn_content(download_dir=None):
     """
-    Download the latest FATN content.
+    Download the latest FATN content with URL validation.
 
     Args:
         download_dir (str): Directory to save ZIP file (default: ~/FATN_to_USB/)
@@ -107,16 +129,21 @@ def download_fatn_content(download_dir=None):
         print(f'Fetching FATN website: {url}')
 
         FATN_parse = GetFATNUrl()
-        FATN = urlopen(url)
+        FATN = urlopen(url, timeout=30)
         FATN_parse.feed(str(FATN.read()))
 
         if not FATN_parse.FATNurl:
             print('❌ No Dropbox link found on FATN website')
             return None
 
+        # Validate URL scheme before following redirect (SSRF prevention)
+        if not is_safe_url(FATN_parse.FATNurl):
+            print(f'❌ Security: Rejected unsafe URL scheme: {FATN_parse.FATNurl}')
+            return None
+
         # Get actual Dropbox URL from tinyurl
         print(f'Resolving redirect: {FATN_parse.FATNurl}')
-        FATNdropboxurl = urlopen(FATN_parse.FATNurl)
+        FATNdropboxurl = urlopen(FATN_parse.FATNurl, timeout=30)
         dropbox_url = FATNdropboxurl.geturl()
         print(f'Dropbox URL: {dropbox_url}')
 
