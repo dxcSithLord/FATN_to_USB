@@ -8,13 +8,13 @@ This document outlines a comprehensive strategy for detecting and utilizing vari
 
 ## Table of Contents
 
-1. [Current State Analysis](#current-state-analysis)
-2. [Display Detection Strategy](#display-detection-strategy)
-3. [Display Types and Detection Methods](#display-types-and-detection-methods)
-4. [Implementation Phases](#implementation-phases)
-5. [Technical Implementation Details](#technical-implementation-details)
-6. [Testing Strategy](#testing-strategy)
-7. [References and Resources](#references-and-resources)
+1. [Current State Analysis](#1-current-state-analysis)
+2. [Display Detection Strategy](#2-display-detection-strategy)
+3. [Display Types and Detection Methods](#3-display-types-and-detection-methods)
+4. [Implementation Phases](#4-implementation-phases)
+5. [Technical Implementation Details](#5-technical-implementation-details)
+6. [Testing Strategy](#6-testing-strategy)
+7. [References and Resources](#7-references-and-resources)
 
 ---
 
