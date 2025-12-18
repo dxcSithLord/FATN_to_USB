@@ -42,6 +42,28 @@ def mock_st7735(monkeypatch):
     return mock_module
 
 
+@pytest.fixture
+def mock_st7789_display():
+    """Create a mock ST7789 display instance for testing."""
+    display = MagicMock()
+    display.width = 240
+    display.height = 240
+    display.begin = MagicMock()
+    display.display = MagicMock()
+    return display
+
+
+@pytest.fixture
+def mock_st7735_display():
+    """Create a mock ST7735 display instance for testing."""
+    display = MagicMock()
+    display.width = 160
+    display.height = 80
+    display.begin = MagicMock()
+    display.display = MagicMock()
+    return display
+
+
 # ============================================================================
 # File System Fixtures
 # ============================================================================

@@ -18,45 +18,16 @@ from pathlib import Path
 
 def import_display_module():
     """
-    Import and initialize display module.
+    Import and initialize display module using detection system.
 
     Returns:
         tuple: (display object, do_mes function) or (None, None) if unavailable
     """
     try:
-        from scrolling_text import do_mes
-        # Try to get display object (ST7789 or ST7735)
-        try:
-            import ST7789 as ST7789
-            disp = ST7789.ST7789(
-                port=0,
-                cs=ST7789.BG_SPI_CS_FRONT,
-                dc=9,
-                backlight=19,
-                spi_speed_hz=80 * 1000 * 1000
-            )
-            print('Display: ST7789 initialized')
-            return disp, do_mes
-        except Exception:
-            pass
-
-        try:
-            import ST7735 as ST7735
-            disp = ST7735.ST7735(
-                port=0,
-                cs=1,
-                dc=9,
-                backlight=12,
-                rotation=270,
-                spi_speed_hz=10000000
-            )
-            print('Display: ST7735 initialized')
-            return disp, do_mes
-        except Exception:
-            pass
-
-        print('Warning: No display available')
-        return None, None
+        from scrolling_text import do_mes, disp
+        # Display is already initialized by scrolling_text module
+        # which uses the display_detector system
+        return disp, do_mes
 
     except ImportError as e:
         print(f'Warning: Could not import display module: {e}')
