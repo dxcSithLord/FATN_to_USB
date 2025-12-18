@@ -47,7 +47,7 @@ class TestGetFATNUrl:
 
     @pytest.mark.unit
     def test_handle_starttag_multiple_tinyurls(self):
-        """Test that parser captures first tinyurl when multiple exist."""
+        """Test that parser overwrites URL when multiple tinyurls exist."""
         parser = GetFATNUrl()
 
         # First tinyurl
