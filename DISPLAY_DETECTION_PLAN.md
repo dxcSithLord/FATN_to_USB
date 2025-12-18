@@ -47,39 +47,286 @@ The current `scrolling_text.py` module attempts to initialize displays in the fo
 
 ## 2. Display Detection Strategy
 
-### 2.1 Cascading Fallback Hierarchy
+### 2.1 Cascading Fallback Hierarchy (Updated for RPi Zero/Zero 2)
+
+**Target Hardware:** Raspberry Pi Zero, Zero W, Zero 2 W
+**Target OS:** Debian Trixie Slim (console-only minimum), with GUI detection
 
 ```
-Priority 1: GPIO-based Displays (SPI/I2C)
-    ├── ST7789 (current)
-    ├── ST7735 (current)
-    ├── SSD1306 (OLED, I2C)
-    ├── ILI9341 (TFT, SPI)
-    └── Generic SPI/I2C displays
+Priority 1: Known GPIO Displays (Expected Hardware)
+    ├── ST7789 (240x240, SPI) - Primary expected display
+    └── ST7735 (160x80, SPI) - Secondary expected display
 
-Priority 2: HDMI/Framebuffer Displays
-    ├── /dev/fb0 (HDMI output)
-    ├── /dev/fb1 (Secondary display)
-    └── KMS/DRM displays
+Priority 2: Raspberry Pi Model Detection
+    ├── Detect RPi Zero/Zero 2 vs other models
+    ├── Read /proc/cpuinfo for hardware identification
+    └── Determine display capabilities based on model
 
-Priority 3: Console/Terminal Output
-    ├── TTY output (local console)
-    ├── ASCII art visualization
-    └── Syslog/journald logging
+Priority 3: GUI Availability Check
+    ├── Check for X11 display server (DISPLAY environment)
+    ├── Check for Wayland compositor
+    ├── Detect desktop environment presence
+    └── Fall back to framebuffer if GUI unavailable
 
-Priority 4: No Visual Output
-    └── Log-only mode (for headless systems)
+Priority 4: Framebuffer/Console Output
+    ├── /dev/fb0 (if HDMI connected)
+    ├── Console/TTY output (always available)
+    └── Syslog logging (headless fallback)
+
+Priority 5: Headless/Log-Only Mode
+    └── systemd journal logging only
 ```
 
-### 2.2 Detection Philosophy
+### 2.2 Detection Philosophy (Revised)
 
-**Progressive Enhancement**: Start with the most capable display and fall back gracefully to simpler output methods. Each level should maintain core functionality while adapting to hardware limitations.
+**Hardware-First Approach**: The system is designed for Raspberry Pi Zero/Zero 2 with one of two specific SPI displays. Detection prioritizes these known configurations before attempting fallbacks.
+
+**Stages:**
+1. **Stage 1:** Try ST7789 and ST7735 initialization (expected configuration)
+2. **Stage 2:** If no SPI display found, identify the Raspberry Pi model
+3. **Stage 3:** Based on RPi model, check for GUI vs console-only environment
+4. **Stage 4:** Select appropriate output method (framebuffer, console, or log-only)
+
+**Key Principle**: Graceful degradation from the expected configuration to whatever output is available.
 
 ---
 
 ## 3. Display Types and Detection Methods
 
-### 3.1 SPI-Based Displays (GPIO)
+### 3.0 Raspberry Pi Model Detection (Priority 2)
+
+#### Raspberry Pi Zero and Zero 2 Identification
+
+**Target Models:**
+- Raspberry Pi Zero (ARMv6, BCM2835, single-core, 512MB)
+- Raspberry Pi Zero W (Zero + WiFi/Bluetooth)
+- Raspberry Pi Zero 2 W (ARMv8, BCM2710A1, quad-core, 512MB)
+
+#### Detection Method
+
+**Read /proc/cpuinfo:**
+```python
+def detect_raspberry_pi_model():
+    """
+    Detect specific Raspberry Pi model from /proc/cpuinfo.
+
+    Returns:
+        dict: Model information including type, revision, and capabilities
+    """
+    model_info = {
+        'model': 'unknown',
+        'is_zero': False,
+        'is_zero_2': False,
+        'hardware': None,
+        'revision': None
+    }
+
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            cpuinfo = f.read()
+
+        for line in cpuinfo.split('\n'):
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+
+                if key == 'Hardware':
+                    model_info['hardware'] = value
+                elif key == 'Revision':
+                    model_info['revision'] = value
+                elif key == 'Model':
+                    model_info['model'] = value
+
+                    # Detect Zero variants
+                    if 'Zero' in value:
+                        model_info['is_zero'] = True
+                        if 'Zero 2' in value:
+                            model_info['is_zero_2'] = True
+
+    except FileNotFoundError:
+        pass
+
+    return model_info
+```
+
+**Revision Code Lookup:**
+```python
+# Raspberry Pi revision codes for Zero models
+ZERO_REVISIONS = {
+    '900092': 'Pi Zero 1.2',
+    '900093': 'Pi Zero 1.3',
+    '920093': 'Pi Zero 1.3',
+    '9000c1': 'Pi Zero W 1.1',
+    '902120': 'Pi Zero 2 W 1.0'
+}
+
+def identify_zero_model(revision):
+    """Identify specific Zero model from revision code."""
+    return ZERO_REVISIONS.get(revision, 'Unknown Zero variant')
+```
+
+#### Zero-Specific Considerations
+
+| Model | CPU | Architecture | Limitations |
+|-------|-----|--------------|-------------|
+| Zero | BCM2835 Single-core | ARMv6 | Limited processing power |
+| Zero W | BCM2835 Single-core | ARMv6 | WiFi/BT, same CPU as Zero |
+| Zero 2 W | BCM2710A1 Quad-core | ARMv8 (64-bit capable) | Much faster, use for performance |
+
+**Performance Implications:**
+- Zero/Zero W: Avoid heavy framebuffer operations, prioritize SPI displays
+- Zero 2 W: Can handle framebuffer rendering, more display options
+- All models: 512MB RAM limit, minimize memory usage
+
+### 3.0.1 GUI Detection (Priority 3)
+
+#### Debian Trixie Environment Detection
+
+**Minimum Target:** Debian Trixie Slim (console-only, no GUI)
+**Optional:** Full desktop environment (if installed)
+
+#### Detection Methods
+
+**1. X11 Display Server Detection:**
+```python
+import os
+
+def detect_x11():
+    """Check if X11 display server is running."""
+    display = os.environ.get('DISPLAY')
+
+    if not display:
+        return False
+
+    # Check if X server is actually responding
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['xdpyinfo'],
+            capture_output=True,
+            timeout=2
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+```
+
+**2. Wayland Compositor Detection:**
+```python
+def detect_wayland():
+    """Check if Wayland compositor is running."""
+    wayland_display = os.environ.get('WAYLAND_DISPLAY')
+    xdg_session_type = os.environ.get('XDG_SESSION_TYPE')
+
+    if wayland_display or xdg_session_type == 'wayland':
+        return True
+
+    # Check for Wayland socket
+    wayland_socket = f"/run/user/{os.getuid()}/wayland-0"
+    return os.path.exists(wayland_socket)
+```
+
+**3. Desktop Environment Detection:**
+```python
+def detect_desktop_environment():
+    """Detect if a desktop environment is running."""
+    # Check common DE indicators
+    de_indicators = [
+        'XDG_CURRENT_DESKTOP',
+        'DESKTOP_SESSION',
+        'GNOME_DESKTOP_SESSION_ID',
+        'KDE_FULL_SESSION'
+    ]
+
+    for indicator in de_indicators:
+        if os.environ.get(indicator):
+            return {
+                'has_gui': True,
+                'type': os.environ.get(indicator),
+                'session': os.environ.get('XDG_SESSION_TYPE', 'unknown')
+            }
+
+    return {'has_gui': False, 'type': None, 'session': 'console'}
+```
+
+**4. Console-Only Detection:**
+```python
+def is_console_only():
+    """Determine if running in console-only (no GUI) mode."""
+    # Check if running on a virtual terminal (tty)
+    if os.environ.get('TERM', '').startswith('linux'):
+        return True
+
+    # Check if SSH session
+    if os.environ.get('SSH_CONNECTION') or os.environ.get('SSH_CLIENT'):
+        return True
+
+    # No DISPLAY and no WAYLAND_DISPLAY
+    if not os.environ.get('DISPLAY') and not os.environ.get('WAYLAND_DISPLAY'):
+        return True
+
+    return False
+```
+
+#### GUI Availability Matrix
+
+| Environment | Detection Method | Available Outputs |
+|-------------|------------------|-------------------|
+| Debian Trixie Slim (console) | TERM=linux, no DISPLAY | SPI displays, Console, FB |
+| Trixie + X11 | DISPLAY set, xdpyinfo works | All display types |
+| Trixie + Wayland | WAYLAND_DISPLAY set | All display types |
+| SSH Session | SSH_CONNECTION set | SPI displays, Console |
+| Headless | No TTY, no DISPLAY | SPI displays, Logging only |
+
+#### Debian Trixie Specific Considerations
+
+**OS Detection:**
+```python
+def detect_debian_version():
+    """Detect Debian version."""
+    try:
+        with open('/etc/debian_version', 'r') as f:
+            version = f.read().strip()
+
+        # Trixie is version 13
+        if version.startswith('13') or 'trixie' in version.lower():
+            return 'trixie'
+
+        return version
+    except FileNotFoundError:
+        return None
+```
+
+**Minimal Installation Check:**
+```python
+def is_minimal_install():
+    """Check if running Debian Slim/minimal install."""
+    # Check for common GUI packages
+    gui_packages = [
+        'xserver-xorg',
+        'lightdm',
+        'gdm3',
+        'lxde',
+        'xfce4'
+    ]
+
+    try:
+        result = subprocess.run(
+            ['dpkg', '-l'] + gui_packages,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        # If none installed, likely minimal
+        return 'no packages found' in result.stderr.lower()
+    except:
+        # Assume minimal if can't determine
+        return True
+```
+
+### 3.1 SPI-Based Displays (GPIO) - Priority 1
 
 #### Detection Method
 
@@ -901,14 +1148,54 @@ The display detection and fallback system will be considered successful when:
 
 ## 11. Conclusion
 
-This plan provides a comprehensive roadmap for implementing robust display detection and fallback capabilities in the FATN_to_USB system. By supporting multiple display types with intelligent fallback mechanisms, we ensure the system can provide user feedback in any hardware configuration, from specialized GPIO displays to standard HDMI monitors to headless console-only systems.
+This plan provides a comprehensive roadmap for implementing robust display detection and fallback capabilities in the FATN_to_USB system, specifically optimized for Raspberry Pi Zero and Zero 2 W hardware running Debian Trixie.
+
+### Key Focus Areas
+
+**Primary Hardware Target:**
+- Raspberry Pi Zero, Zero W, and Zero 2 W
+- Optimized for limited resources (512MB RAM, single/quad-core)
+- Expected configuration: ST7789 or ST7735 SPI display attached
+
+**Operating System Target:**
+- Debian Trixie 13 (Slim/minimal installation assumed)
+- Console-only environment as baseline
+- GUI detection for optional desktop environments
+
+**Detection Hierarchy:**
+1. **Stage 1 (Priority):** ST7789/ST7735 SPI displays (expected hardware)
+2. **Stage 2 (Fallback):** Raspberry Pi model identification
+3. **Stage 3 (Adaptation):** GUI vs console-only environment detection
+4. **Stage 4 (Graceful Degradation):** Framebuffer, console output, or logging
+
+### Implementation Philosophy
+
+The hardware-first approach prioritizes the known, expected configuration (SPI displays on Pi Zero) before attempting more complex detection. This ensures:
+
+- **Fast startup** on correctly configured systems (< 2 seconds for known displays)
+- **Minimal overhead** on resource-constrained Zero/Zero W hardware
+- **Reliable fallback** when hardware doesn't match expectations
+- **Clear diagnostics** to help users identify configuration issues
+
+### Value Delivered
+
+By implementing this plan, the FATN_to_USB system will:
+
+1. ✅ **Maintain current functionality** for users with ST7789/ST7735 displays
+2. ✅ **Support Debian Trixie** as the primary OS (console and GUI variants)
+3. ✅ **Optimize for Pi Zero/Zero 2** performance characteristics
+4. ✅ **Provide console output** on minimal installations without displays
+5. ✅ **Enable debugging** through comprehensive detection logging
+6. ✅ **Support future hardware** through the abstraction layer
 
 The cascading fallback approach ensures reliability while the abstraction layer maintains clean, maintainable code. Progressive implementation allows for incremental delivery of value while minimizing risk to existing functionality.
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1 (Updated for Pi Zero + Debian Trixie focus)
 **Date:** 2025-12-18
 **Status:** Draft - Pending Approval
+**Target Hardware:** Raspberry Pi Zero, Zero W, Zero 2 W
+**Target OS:** Debian Trixie 13 (Slim minimum)
 **Author:** Claude Code Implementation Team
 **Next Review:** Upon plan approval
