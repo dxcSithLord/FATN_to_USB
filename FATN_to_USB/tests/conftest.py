@@ -93,7 +93,7 @@ def sample_zip_file(temp_dir):
 def empty_zip_file(temp_dir):
     """Create an empty ZIP file for testing."""
     zip_path = os.path.join(temp_dir, 'empty.zip')
-    with zipfile.ZipFile(zip_path, 'w') as zf:
+    with zipfile.ZipFile(zip_path, 'w'):
         pass  # Create empty zip
     return zip_path
 
@@ -230,7 +230,7 @@ def mock_server_error_response():
 @pytest.fixture
 def mock_subprocess_run():
     """Mock subprocess.run for testing system commands."""
-    def _mock_run(cmd, **kwargs):
+    def _mock_run(cmd, **_):
         result = Mock()
         result.returncode = 0
         result.stdout = ""

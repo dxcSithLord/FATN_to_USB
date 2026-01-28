@@ -34,11 +34,11 @@ def do_mes(display, MESSAGE='', colour=(0,255,0)):
         # Fallback to console output
         print(f'\n[DISPLAY] {MESSAGE}')
         if _display_info.display_type == 'console':
-            print(f'Output method: Console-only (Debian Trixie Slim)')
+            print('Output method: Console-only (Debian Trixie Slim)')
         elif _display_info.display_type == 'framebuffer':
-            print(f'Output method: Framebuffer (/dev/fb0 available)')
+            print('Output method: Framebuffer (/dev/fb0 available)')
         else:
-            print(f'Output method: Logging only (no display hardware)')
+            print('Output method: Logging only (no display hardware)')
         return
 
     # Initialize display.

@@ -11,6 +11,7 @@ Target OS: Debian Trixie (13) Slim (console-only minimum)
 """
 
 import os
+import shutil
 import subprocess
 from typing import Dict, Optional, Tuple, Any
 
@@ -86,9 +87,13 @@ def detect_raspberry_pi_model() -> Dict[str, Any]:
         # Extract Hardware line
         for line in cpuinfo.split('\n'):
             if line.startswith('Hardware'):
-                model_info['hardware'] = line.split(':')[1].strip()
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    model_info['hardware'] = parts[1].strip()
             elif line.startswith('Revision'):
-                model_info['revision'] = line.split(':')[1].strip()
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    model_info['revision'] = parts[1].strip()
 
         # Identify Zero models by revision code
         revision = model_info['revision']
@@ -156,6 +161,10 @@ def detect_x11() -> bool:
     if not display:
         return False
 
+    # Check if xdpyinfo command is available
+    if not shutil.which('xdpyinfo'):
+        return False
+
     # Check if X server is actually responding
     try:
         result = subprocess.run(
@@ -200,18 +209,19 @@ def is_console_only() -> bool:
             return True
 
         # Check systemd target (if available)
-        try:
-            result = subprocess.run(
-                ['systemctl', 'get-default'],
-                capture_output=True,
-                timeout=5,
-                text=True
-            )
-            if result.returncode == 0:
-                target = result.stdout.strip()
-                return target == 'multi-user.target'
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+        if shutil.which('systemctl'):
+            try:
+                result = subprocess.run(
+                    ['systemctl', 'get-default'],
+                    capture_output=True,
+                    timeout=5,
+                    text=True
+                )
+                if result.returncode == 0:
+                    target = result.stdout.strip()
+                    return target == 'multi-user.target'
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
 
     return False
 
@@ -329,20 +339,20 @@ def detect_and_init_display() -> DisplayInfo:
     info.spi_devices = detect_spi_devices()
     if info.spi_devices:
         print(f'Found SPI devices: {", ".join(info.spi_devices)}')
-    else:
-        print('No SPI devices detected')
 
-    # Try ST7789 first
-    disp = try_init_st7789()
-    if disp:
-        info.display_type = 'ST7789'
-        info.display_instance = disp
-    else:
-        # Try ST7735 as fallback
-        disp = try_init_st7735()
+        # Try ST7789 first
+        disp = try_init_st7789()
         if disp:
-            info.display_type = 'ST7735'
+            info.display_type = 'ST7789'
             info.display_instance = disp
+        else:
+            # Try ST7735 as fallback
+            disp = try_init_st7735()
+            if disp:
+                info.display_type = 'ST7735'
+                info.display_instance = disp
+    else:
+        print('No SPI devices detected - skipping SPI display initialization')
 
     # Stage 2: Detect Raspberry Pi model
     print('\n[Stage 2] Detecting Raspberry Pi model...')

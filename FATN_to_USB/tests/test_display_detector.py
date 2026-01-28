@@ -192,9 +192,10 @@ class TestGUIDetection:
     def test_detect_x11_available(self):
         """Test X11 detection when available."""
         with patch.dict(os.environ, {'DISPLAY': ':0'}):
-            with patch('subprocess.run') as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                result = detect_x11()
+            with patch('shutil.which', return_value='/usr/bin/xdpyinfo'):
+                with patch('subprocess.run') as mock_run:
+                    mock_run.return_value = MagicMock(returncode=0)
+                    result = detect_x11()
 
         assert result is True
 
@@ -208,17 +209,19 @@ class TestGUIDetection:
     def test_detect_x11_not_responding(self):
         """Test X11 detection when server not responding."""
         with patch.dict(os.environ, {'DISPLAY': ':0'}):
-            with patch('subprocess.run') as mock_run:
-                mock_run.return_value = MagicMock(returncode=1)
-                result = detect_x11()
+            with patch('shutil.which', return_value='/usr/bin/xdpyinfo'):
+                with patch('subprocess.run') as mock_run:
+                    mock_run.return_value = MagicMock(returncode=1)
+                    result = detect_x11()
 
         assert result is False
 
     def test_detect_x11_timeout(self):
         """Test X11 detection with timeout."""
         with patch.dict(os.environ, {'DISPLAY': ':0'}):
-            with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('xdpyinfo', 5)):
-                result = detect_x11()
+            with patch('shutil.which', return_value='/usr/bin/xdpyinfo'):
+                with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('xdpyinfo', 5)):
+                    result = detect_x11()
 
         assert result is False
 
@@ -253,12 +256,13 @@ class TestGUIDetection:
     def test_is_console_only_no_display_no_ssh(self):
         """Test console-only detection without display or SSH."""
         with patch.dict(os.environ, {}, clear=True):
-            with patch('subprocess.run') as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=0,
-                    stdout='multi-user.target\n'
-                )
-                result = is_console_only()
+            with patch('shutil.which', return_value='/usr/bin/systemctl'):
+                with patch('subprocess.run') as mock_run:
+                    mock_run.return_value = MagicMock(
+                        returncode=0,
+                        stdout='multi-user.target\n'
+                    )
+                    result = is_console_only()
 
         assert result is True
 
@@ -358,7 +362,7 @@ class TestFramebuffer:
 class TestDisplayInitialization:
     """Tests for display initialization."""
 
-    def test_try_init_st7789_success(self, mock_st7789_display):
+    def test_try_init_st7789_success(self):
         """Test ST7789 initialization success."""
         with patch.dict(sys.modules, {'ST7789': MagicMock()}):
             disp = try_init_st7789()
@@ -383,7 +387,7 @@ class TestDisplayInitialization:
 
         assert disp is None
 
-    def test_try_init_st7735_success(self, mock_st7735_display):
+    def test_try_init_st7735_success(self):
         """Test ST7735 initialization success."""
         with patch.dict(sys.modules, {'ST7735': MagicMock()}):
             disp = try_init_st7735()

@@ -118,6 +118,15 @@ def download_fatn_content(download_dir=None):
         dropbox_url = FATNdropboxurl.geturl()
         print(f'Dropbox URL: {dropbox_url}')
 
+        # Validate resolved redirect target URL
+        if not dropbox_url or not dropbox_url.strip():
+            print('❌ Security: Empty or invalid redirect target')
+            return None
+
+        if not is_safe_url(dropbox_url):
+            print(f'❌ Security: Rejected unsafe redirect target scheme: {dropbox_url}')
+            return None
+
         # Convert to download link
         download_url = dropbox_url.replace('?dl=0', '?dl=1')
         print(f'Download URL: {download_url}')
@@ -214,6 +223,12 @@ def process_fatn_workflow(args):
             return 1
 
         display_message(disp, do_mes, 'DOWNLOAD OK', (0, 255, 0))
+
+        # If download-only mode (not auto and no USB flags), exit successfully
+        if args.download and not args.auto and not args.wait_usb and not args.device:
+            print('\n✓ Download completed successfully!')
+            print(f'✓ File saved to: {zip_path}')
+            return 0
     else:
         # Use existing ZIP file
         default_path = os.path.expanduser('~/FATN_to_USB/FATN News Weekly File.zip')
