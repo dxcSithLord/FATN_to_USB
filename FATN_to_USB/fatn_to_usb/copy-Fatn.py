@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+"""
+USB management module for FATN_to_USB system.
+
+Handles USB device detection, mounting, file operations, and safe unmounting.
+Requires udisks2 installed with appropriate polkit settings.
+"""
+import os
+import subprocess
+import time
+import zipfile
+import glob
+from pathlib import Path
+
+
+def proc_cpuinfo_exists():
+    """Check if /proc/cpuinfo exists (Linux system check)."""
+    return os.path.exists('/proc/cpuinfo')
+
+
+def get_cpuinfo():
+    """
+    Read the processor information into a dictionary.
+
+    Determines if running on Raspberry Pi or other Linux system.
+
+    Returns:
+        dict: Dictionary of CPU information from /proc/cpuinfo
+    """
+    cpudict = {}
+    if proc_cpuinfo_exists():
+        with open('/proc/cpuinfo', 'r', newline='\n') as reader:
+            cpudict = {
+                k.strip(): v.strip()
+                for line in reader
+                if ':' in line
+                for (k, v) in [line.split(':', 1)]
+            }
+    return cpudict
+
+
+def is_raspberry_pi():
+    """
+    Determine if running on a Raspberry Pi.
+
+    Returns:
+        bool: True if running on Raspberry Pi, False otherwise
+    """
+    cpuinfo = get_cpuinfo()
+    # Check for Raspberry Pi specific hardware identifiers
+    hardware = cpuinfo.get('Hardware', '').lower()
+    model = cpuinfo.get('Model', '').lower()
+    return 'bcm' in hardware or 'raspberry' in model
+
+
+def get_usb_devices():
+    """
+    Get list of USB storage devices using udisksctl.
+
+    Filters out SD card devices on Raspberry Pi (mmcblk).
+
+    Returns:
+        list: List of device paths (e.g., ['/dev/sda1', '/dev/sdb1'])
+    """
+    devices = []
+    try:
+        # Run udisksctl status to get device information
+        result = subprocess.run(
+            ['udisksctl', 'status'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10
+        )
+
+        # Parse output to find USB devices
+        for line in result.stdout.split('\n'):
+            # Look for device paths in the output
+            if '/dev/' in line:
+                # Extract device path
+                parts = line.split()
+                for part in parts:
+                    if part.startswith('/dev/'):
+                        # On Raspberry Pi, ignore mmcblk (SD card)
+                        if is_raspberry_pi() and 'mmcblk' in part:
+                            continue
+                        # Typically want partition devices (sda1, sdb1, etc)
+                        if any(part.endswith(str(i)) for i in range(10)):
+                            devices.append(part)
+
+    except subprocess.CalledProcessError as e:
+        print(f'Error running udisksctl status: {e}')
+    except FileNotFoundError:
+        print('udisksctl not found. Please install udisks2')
+
+    return devices
+
+
+def mount_usb_device(device_path):
+    """
+    Mount a USB device using udisksctl.
+
+    Args:
+        device_path (str): Device path (e.g., '/dev/sda1')
+
+    Returns:
+        str: Mount point path if successful, None otherwise
+    """
+    try:
+        result = subprocess.run(
+            ['udisksctl', 'mount', '-b', device_path],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+
+        # Extract mount point from output
+        # Output format: "Mounted /dev/sda1 at /media/user/USB_NAME"
+        output = result.stdout.strip()
+        if 'at' in output:
+            mount_point = output.split('at')[-1].strip()
+            print(f'Successfully mounted {device_path} at {mount_point}')
+            return mount_point
+        else:
+            print(f'Mounted {device_path} but could not determine mount point')
+            return None
+
+    except subprocess.CalledProcessError as e:
+        print(f'Error mounting {device_path}: {e.stderr}')
+        return None
+
+
+def unmount_usb_device(device_path):
+    """
+    Safely unmount a USB device using udisksctl.
+
+    Args:
+        device_path (str): Device path (e.g., '/dev/sda1')
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Sync to ensure all data is written
+        subprocess.run(['sync'], check=True, timeout=30)
+        time.sleep(1)
+        subprocess.run(['sync'], check=True, timeout=30)
+
+        # Unmount the device
+        result = subprocess.run(
+            ['udisksctl', 'unmount', '-b', device_path],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+
+        print(f'Successfully unmounted {device_path}')
+        return True
+
+    except subprocess.CalledProcessError as e:
+        print(f'Error unmounting {device_path}: {e.stderr}')
+        return False
+
+
+def remove_old_mp3_files(mount_point):
+    """
+    Remove all MP3 files from the USB mount point.
+
+    Args:
+        mount_point (str): Path to USB mount point
+
+    Returns:
+        int: Number of files removed
+    """
+    if not mount_point or not os.path.exists(mount_point):
+        print(f'Invalid mount point: {mount_point}')
+        return 0
+
+    try:
+        mp3_files = glob.glob(os.path.join(mount_point, '*.mp3'))
+        count = len(mp3_files)
+
+        for mp3_file in mp3_files:
+            try:
+                os.remove(mp3_file)
+                print(f'Removed: {os.path.basename(mp3_file)}')
+            except OSError as e:
+                print(f'Error removing {mp3_file}: {e}')
+
+        return count
+
+    except Exception as e:
+        print(f'Error removing MP3 files: {e}')
+        return 0
+
+
+def is_safe_path(base_path, file_path):
+    """
+    Validate that a file path is safe and doesn't escape the base directory.
+
+    Prevents Zip Slip vulnerability by checking for:
+    - Absolute paths
+    - Parent directory references (..)
+    - Paths that would write outside base_path
+
+    Args:
+        base_path (str): The base directory (e.g., USB mount point)
+        file_path (str): The file path to validate (from ZIP archive)
+
+    Returns:
+        bool: True if path is safe, False otherwise
+    """
+    # Normalize paths to resolve any '..' or '.' components
+    base = os.path.abspath(base_path)
+    target = os.path.abspath(os.path.join(base_path, file_path))
+
+    # Check if the target path starts with the base path
+    # This ensures the file will be extracted within the intended directory
+    return target.startswith(base + os.sep) or target == base
+
+
+def extract_zip_to_usb(zip_path, mount_point):
+    """
+    Extract ZIP file contents to USB mount point with security validation.
+
+    Implements Zip Slip prevention by validating all file paths before extraction.
+
+    Args:
+        zip_path (str): Path to ZIP file
+        mount_point (str): Path to USB mount point
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not os.path.exists(zip_path):
+        print(f'ZIP file not found: {zip_path}')
+        return False
+
+    if not mount_point or not os.path.exists(mount_point):
+        print(f'Invalid mount point: {mount_point}')
+        return False
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # Validate all file paths before extraction (Zip Slip prevention)
+            for member in zip_ref.namelist():
+                if not is_safe_path(mount_point, member):
+                    print(f'❌ Security: Rejected unsafe path in ZIP: {member}')
+                    print(f'   This path attempts to write outside {mount_point}')
+                    return False
+
+            # All paths validated - safe to extract
+            zip_ref.extractall(mount_point)
+            extracted_files = zip_ref.namelist()
+            print(f'Extracted {len(extracted_files)} files to {mount_point}')
+            for filename in extracted_files:
+                print(f'  - {filename}')
+            return True
+
+    except zipfile.BadZipFile:
+        print(f'Invalid ZIP file: {zip_path}')
+        return False
+    except Exception as e:
+        print(f'Error extracting ZIP file: {e}')
+        return False
+
+
+def process_usb_update(device_path, zip_file_path):
+    """
+    Complete workflow to update USB with FATN content.
+
+    Ensures USB is properly unmounted even if errors occur during the update process.
+
+    Args:
+        device_path (str): USB device path (e.g., '/dev/sda1')
+        zip_file_path (str): Path to FATN ZIP file
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f'\n=== Starting USB update process ===')
+    print(f'Device: {device_path}')
+    print(f'ZIP file: {zip_file_path}')
+
+    # Step 1: Mount USB device
+    print('\n[1/5] Mounting USB device...')
+    mount_point = mount_usb_device(device_path)
+    if not mount_point:
+        print('❌ Failed to mount USB device')
+        return False
+
+    # Track success state
+    success = False
+
+    try:
+        # Step 2: Remove old MP3 files
+        print('\n[2/5] Removing old MP3 files...')
+        removed_count = remove_old_mp3_files(mount_point)
+        print(f'✓ Removed {removed_count} old MP3 file(s)')
+
+        # Step 3: Extract new content
+        print('\n[3/5] Extracting new FATN content...')
+        if not extract_zip_to_usb(zip_file_path, mount_point):
+            print('❌ Failed to extract ZIP file')
+            # Will still unmount in finally block
+            return False
+        print('✓ Content extracted successfully')
+
+        # Step 4: Sync filesystem
+        print('\n[4/5] Synchronizing filesystem...')
+        subprocess.run(['sync'], check=True, timeout=30)
+        time.sleep(1)
+        print('✓ Sync complete')
+
+        # Mark as successful before unmounting
+        success = True
+
+    except subprocess.TimeoutExpired:
+        print('❌ Sync operation timed out')
+        return False
+    except Exception as e:
+        print(f'\n❌ Error during USB update: {e}')
+        return False
+    finally:
+        # Step 5: Always unmount USB (even on failure)
+        print('\n[5/5] Unmounting USB device...')
+        if unmount_usb_device(device_path):
+            print('✓ USB unmounted successfully')
+            if success:
+                print('\n=== USB update complete! ===')
+                print('USB drive can now be safely removed.')
+        else:
+            print('❌ Failed to unmount USB device')
+            print('⚠️  WARNING: USB may not be safe to remove')
+            success = False
+
+    return success
+
+
+if __name__ == '__main__':
+    """
+    Example usage when run directly.
+    """
+    # Check if running on Raspberry Pi
+    if is_raspberry_pi():
+        print('Running on Raspberry Pi')
+    else:
+        print('Running on generic Linux system')
+
+    # Display CPU info
+    cpuinfo = get_cpuinfo()
+    if cpuinfo:
+        print(f"Hardware: {cpuinfo.get('Hardware', 'Unknown')}")
+        print(f"Model: {cpuinfo.get('Model', 'Unknown')}")
+
+    # List USB devices
+    print('\nDetecting USB devices...')
+    devices = get_usb_devices()
+    if devices:
+        print(f'Found {len(devices)} USB device(s):')
+        for device in devices:
+            print(f'  - {device}')
+    else:
+        print('No USB devices found')
+
+    # Example: Process USB update (uncomment to use)
+    # if devices:
+    #     zip_path = os.path.expanduser('~/FATN News Weekly File.zip')
+    #     process_usb_update(devices[0], zip_path)

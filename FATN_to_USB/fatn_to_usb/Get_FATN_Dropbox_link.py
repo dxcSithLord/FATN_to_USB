@@ -128,7 +128,8 @@ def Download_FATN(download_url: str,
 
     if os.path.exists(folder_name):
         path = os.path.join(folder_name, local_file)
-        r = requests.get(download_url, stream=True)
+        # Add timeout to prevent indefinite hangs (60s connection, 300s read)
+        r = requests.get(download_url, stream=True, timeout=(60, 300))
         if r.ok:
             print("Saving to", os.path.abspath(path))
             with open(path, 'wb') as f:
@@ -144,17 +145,22 @@ def Download_FATN(download_url: str,
         print('Download failed - directory location not valid')
 
 
-url = 'https://www.fatntalkingnews.org.uk/about-fatn-talking-news/#coronavirus'
-FATN_parse = GetFATNUrl()
+if __name__ == '__main__':
+    """
+    Example usage when run directly.
+    This demonstrates the complete download workflow.
+    """
+    url = 'https://www.fatntalkingnews.org.uk/about-fatn-talking-news/#coronavirus'
+    FATN_parse = GetFATNUrl()
 
-FATN = urlopen(url)  # get the FATN wordpress webpage
-FATN_parse.feed(str(FATN.read()))  # parse it for the dropbox link
-# print(FATN_parse.FATNurl)
+    FATN = urlopen(url)  # get the FATN wordpress webpage
+    FATN_parse.feed(str(FATN.read()))  # parse it for the dropbox link
+    # print(FATN_parse.FATNurl)
 
-FATNdropboxurl = urlopen(FATN_parse.FATNurl)  # Get dropbox url from link
-print("FATN Dropbox URL:", FATNdropboxurl.geturl())
+    FATNdropboxurl = urlopen(FATN_parse.FATNurl)  # Get dropbox url from link
+    print("FATN Dropbox URL:", FATNdropboxurl.geturl())
 
-FATNdownload = str(FATNdropboxurl.geturl()).replace('?dl=0', '?dl=1')  # set the download bit
-print(FATNdownload)
+    FATNdownload = str(FATNdropboxurl.geturl()).replace('?dl=0', '?dl=1')  # set the download bit
+    print(FATNdownload)
 
-Download_FATN(FATNdownload, '/home/pi/')  # go and get the file
+    Download_FATN(FATNdownload, '/home/pi/')  # go and get the file
