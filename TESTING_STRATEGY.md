@@ -148,7 +148,7 @@ Test individual functions and classes in isolation to verify correct behavior.
 | UT-054 | test_display_initialization_boot | Verify display setup on boot | High |
 | UT-055 | test_main_execution | Verify main execution flow | High |
 
-##### D. copy-Fatn
+##### D. copy-Fatn.py
 **Test Cases for System Utilities:**
 
 | Test ID | Test Name | Description | Priority |
@@ -187,8 +187,8 @@ Test interactions between multiple components to verify they work together corre
 | IT-001 | Download and Parse Workflow | GetFATNUrl + Download_FATN | High |
 | IT-002 | Display Message After Download | Download_FATN + scrolling_text | High |
 | IT-003 | Boot Display Integration | on_boot + scrolling_text | High |
-| IT-004 | USB Detection to Download | copy-Fatn + Get_FATN_Dropbox_link | High |
-| IT-005 | Download to USB Copy | Download_FATN + copy-Fatn | High |
+| IT-004 | USB Detection to Download | copy-Fatn.py + Get_FATN_Dropbox_link | High |
+| IT-005 | Download to USB Copy | Download_FATN + copy-Fatn.py | High |
 | IT-006 | Full Workflow End-to-End | All modules | High |
 | IT-007 | Error Propagation | All modules with error injection | Medium |
 | IT-008 | Display Fallback Chain | on_boot + scrolling_text with multiple displays | Medium |
@@ -561,7 +561,7 @@ CMD ["poetry", "run", "pytest"]
 ### 10.2 Code Issues to Address Before Testing
 1. **scrolling_text.py:11**: Syntax error (missing try block)
 2. **Version inconsistency**: Update versions across all files
-3. **copy-Fatn**: Implement commented-out functionality
+3. **copy-Fatn.py**: Implement commented-out functionality
 4. **Error handling**: Improve error handling consistency
 5. **Hard-coded paths**: Make paths configurable
 

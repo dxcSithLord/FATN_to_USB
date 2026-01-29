@@ -17,7 +17,7 @@ def import_copy_fatn():
     module_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
         'fatn_to_usb',
-        'copy-Fatn'
+        'copy-Fatn.py'
     )
     spec = importlib.util.spec_from_file_location("copy_fatn", module_path)
     module = importlib.util.module_from_spec(spec)

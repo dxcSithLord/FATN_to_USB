@@ -24,14 +24,20 @@ def import_display_module():
         tuple: (display object, do_mes function) or (None, None) if unavailable
     """
     try:
-        from scrolling_text import do_mes, disp
+        # Try package-relative import first (when installed as package)
+        from .scrolling_text import do_mes, disp
         # Display is already initialized by scrolling_text module
         # which uses the display_detector system
         return disp, do_mes
 
-    except ImportError as e:
-        print(f'Warning: Could not import display module: {e}')
-        return None, None
+    except ImportError:
+        # Fallback to absolute import (for direct script invocation)
+        try:
+            from scrolling_text import do_mes, disp
+            return disp, do_mes
+        except ImportError as e:
+            print(f'Warning: Could not import display module: {e}')
+            return None, None
 
 
 def display_message(disp, do_mes, message, color=(0, 255, 0)):
@@ -167,7 +173,7 @@ def wait_for_usb_device(timeout=300):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "copy_fatn",
-            os.path.join(os.path.dirname(__file__), "copy-Fatn")
+            os.path.join(os.path.dirname(__file__), "copy-Fatn.py")
         )
         copy_fatn = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(copy_fatn)
@@ -264,7 +270,7 @@ def process_fatn_workflow(args):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "copy_fatn",
-            os.path.join(os.path.dirname(__file__), "copy-Fatn")
+            os.path.join(os.path.dirname(__file__), "copy-Fatn.py")
         )
         copy_fatn = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(copy_fatn)

@@ -256,7 +256,7 @@ The FATN_to_USB system is designed to automate the downloading and USB loading o
 ## 9. Known Issues and Limitations
 
 ### 9.1 Current Implementation Gaps
-1. **Incomplete USB Management** (copy-Fatn file)
+1. **Incomplete USB Management** (copy-Fatn.py file)
    - Core USB mounting/copying logic is commented out
    - Automatic USB detection not fully implemented
    - Integration between modules is incomplete
